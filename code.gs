@@ -10,97 +10,152 @@ function showTabSelector() {
   const sheets = ss.getSheets();
   const sheetNames = sheets.map(sheet => sheet.getName());
   
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <base target="_top">
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          select, button { margin: 10px 0; padding: 8px; width: 100%; }
-          button { background-color: #4285f4; color: white; border: none; cursor: pointer; }
-          button:hover { background-color: #357abd; }
-          .hidden { display: none; }
-          label { display: block; margin-top: 10px; }
-        </style>
-      </head>
-      <body>
-        <div>
-          <label for="sheetSelect">Select Sheet:</label>
-          <select id="sheetSelect">
-            ${sheetNames.map(name => '<option value="' + name + '">' + name + '</option>').join('')}
-          </select>
-          <button onclick="getPayDates()">Next</button>
-        </div>
-        <div id="payDatesDiv" class="hidden">
-          <label for="payDateSelect">Select Pay Date:</label>
-          <select id="payDateSelect"></select>
-          <button onclick="showStatusSelect()">Next</button>
-        </div>
-        <div id="statusDiv" class="hidden">
-          <label for="statusSelect">Select Payroll Status:</label>
-          <select id="statusSelect">
-            <option value="pending">Pending</option>
-            <option value="initiated">Initiated</option>
-            <option value="paid">Paid</option>
-          </select>
-          <button onclick="downloadCSV()">Download CSV</button>
-        </div>
+  // In the showTabSelector() function, modify the HTML part:
+
+const html = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <base target="_top">
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        select { margin: 10px 0; padding: 8px; width: 100%; }
+        button { 
+          margin: 20px 0 10px 0; 
+          padding: 8px; 
+          width: 100%;
+          background-color: #4285f4; 
+          color: white; 
+          border: none; 
+          cursor: pointer; 
+        }
+        button:hover { background-color: #357abd; }
+        label { display: block; margin-top: 10px; }
+
+        .loader {
+          border: 4px solid #f3f3f3;
+          border-radius: 50%;
+          border-top: 4px solid #4285f4;
+          width: 30px;
+          height: 30px;
+          animation: spin 1s linear infinite;
+          margin: 10px auto;
+          display: none;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+          text-align: center;
+          color: #666;
+          margin: 10px 0;
+          display: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div>
+        <label for="sheetSelect">Select Sheet:</label>
+        <select id="sheetSelect" onchange="getPayDates()">
+          ${sheetNames.map(name => '<option value="' + name + '">' + name + '</option>').join('')}
+        </select>
+      </div>
+      <div>
+        <label for="payDateSelect">Select Pay Date:</label>
+        <select id="payDateSelect" disabled>
+          <option value="">First select a sheet</option>
+        </select>
+      </div>
+      <div>
+        <label for="payTypeSelect">Select Pay Type:</label>
+        <select id="payTypeSelect">
+          <option value="year">year</option>
+          <option value="hour">hour</option>
+        </select>
+      </div>
+      <div>
+        <label for="statusSelect">Select Payroll Status:</label>
+        <select id="statusSelect">
+          <option value="pending">Pending</option>
+          <option value="initiated">Initiated</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+      <button onclick="downloadCSV()">Download CSV</button>
+      <div id="loader" class="loader"></div>
+      <div id="loadingText" class="loading-text">Generating CSV file...</div>
+
+      
+      <script>
+        function getPayDates() {
+          const selectedSheet = document.getElementById('sheetSelect').value;
+          const payDateSelect = document.getElementById('payDateSelect');
+          payDateSelect.disabled = true;
+          payDateSelect.innerHTML = '<option value="">Loading dates...</option>';
+          
+          google.script.run
+            .withSuccessHandler(function(dates) {
+              payDateSelect.innerHTML = '';
+              dates.forEach(function(date) {
+                const option = document.createElement('option');
+                option.value = date;
+                option.text = date;
+                payDateSelect.appendChild(option);
+              });
+              payDateSelect.disabled = false;
+            })
+            .withFailureHandler(function(error) {
+              alert('Error: ' + error.message);
+              payDateSelect.innerHTML = '<option value="">Error loading dates</option>';
+            })
+            .getUniqueDates(selectedSheet);
+        }
         
-        <script>
-          function getPayDates() {
-            const selectedSheet = document.getElementById('sheetSelect').value;
-            google.script.run
-              .withSuccessHandler(function(dates) {
-                const select = document.getElementById('payDateSelect');
-                select.innerHTML = '';
-                dates.forEach(function(date) {
-                  const option = document.createElement('option');
-                  option.value = date;
-                  option.text = date;
-                  select.appendChild(option);
-                });
-                document.getElementById('payDatesDiv').classList.remove('hidden');
-              })
-              .withFailureHandler(function(error) {
-                alert('Error: ' + error.message);
-              })
-              .getUniqueDates(selectedSheet);
-          }
+        function downloadCSV() {
+          const selectedSheet = document.getElementById('sheetSelect').value;
+          const selectedDate = document.getElementById('payDateSelect').value;
+          const selectedPayType = document.getElementById('payTypeSelect').value;
+          const selectedStatus = document.getElementById('statusSelect').value;
           
-          function showStatusSelect() {
-            document.getElementById('statusDiv').classList.remove('hidden');
-          }
+          // Show loader
+          document.getElementById('loader').style.display = 'block';
+          document.getElementById('loadingText').style.display = 'block';
           
-          function downloadCSV() {
-            const selectedSheet = document.getElementById('sheetSelect').value;
-            const selectedDate = document.getElementById('payDateSelect').value;
-            const selectedStatus = document.getElementById('statusSelect').value;
-            google.script.run
-              .withSuccessHandler(function(csvContent) {
-                if (!csvContent) {
-                  alert('No data found for selected date');
-                  return;
-                }
-                const blob = new Blob([csvContent], {type: 'text/csv'});
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'PayDate_' + selectedDate.replace(/[\/\s,]/g, '_') + '.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-              })
-              .withFailureHandler(function(error) {
-                alert('Error downloading CSV: ' + error.message);
-              })
-              .generateCSV(selectedSheet, selectedDate, selectedStatus);
-          }
-        </script>
-      </body>
-    </html>
-  `;
+          google.script.run
+            .withSuccessHandler(function(csvContent) {
+              // Hide loader
+              document.getElementById('loader').style.display = 'none';
+              document.getElementById('loadingText').style.display = 'none';
+              
+              if (!csvContent) {
+                alert('No data found for selected criteria');
+                return;
+              }
+              const blob = new Blob([csvContent], {type: 'text/csv'});
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'PayDate_' + selectedDate.replace(/[\/\s,]/g, '_') + '_' + selectedPayType + '.csv';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            })
+            .withFailureHandler(function(error) {
+              // Hide loader on error
+              document.getElementById('loader').style.display = 'none';
+              document.getElementById('loadingText').style.display = 'none';
+              alert('Error downloading CSV: ' + error.message);
+            })
+            .generateCSV(selectedSheet, selectedDate, selectedStatus, selectedPayType);
+        }
+      </script>
+    </body>
+  </html>
+`;
   
   const userInterface = HtmlService.createHtmlOutput(html)
     .setWidth(400)
@@ -120,7 +175,7 @@ function getUniqueDates(sheetName) {
   return [...new Set(payDates)].sort((a, b) => new Date(b) - new Date(a));
 }
 
-function generateCSV(sheetName, selectedDate, selectedStatus) {
+function generateCSV(sheetName, selectedDate, selectedStatus, selectedPayType) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   const data = sheet.getDataRange().getValues();
   
@@ -133,22 +188,21 @@ function generateCSV(sheetName, selectedDate, selectedStatus) {
     return headerCell ? headerCell.toString().trim() : '';
   });
   
-  // Add Status and Contract Ref Number as the first two headers
   headers.unshift('Contract Ref Number', 'Status');
   
   const filteredData = data.slice(3).filter(row => {
     const payDate = row[9];
+    const payType = row[30].toString().toLowerCase(); // Column AE (index 30)
     if (!(payDate instanceof Date)) return false;
     const formattedRowDate = Utilities.formatDate(payDate, Session.getScriptTimeZone(), 'MMM dd, yyyy');
-    return formattedRowDate === selectedDate;
+    return formattedRowDate === selectedDate && payType.includes(selectedPayType.toLowerCase());
   });
   
   const filteredRows = filteredData.map(row => {
     const rowData = validColumnIndices.map((index, colIndex) => {
       const cell = row[index];
-      const header = headers[colIndex + 2]; // +2 because we added two columns at beginning
+      const header = headers[colIndex + 2];
       
-      // Handle columns AT and AV (up to 8 decimal places)
       const columnLetter = getColumnLetter(index + 1);
       if (columnLetter === 'AT' || columnLetter === 'AV') {
         if (typeof cell === 'number') {
@@ -160,7 +214,6 @@ function generateCSV(sheetName, selectedDate, selectedStatus) {
         }
       }
       
-      // Handle FX Rate and other numerical values (up to 2 decimal places)
       if (typeof cell === 'number') {
         const decimalStr = cell.toString().split('.');
         if (decimalStr.length > 1) {
@@ -186,17 +239,15 @@ function generateCSV(sheetName, selectedDate, selectedStatus) {
         cell.toString().trim();
     });
     
-    // Get the value from Column D (index 3) and transform it
     const originalRef = row[3].toString();
     const contractRef = originalRef.replace('PSM', 'CNT').replace(/-[^-]*$/, '');
     
-    // Add Contract Ref Number and Status as the first two columns
     rowData.unshift('"' + contractRef + '"', '"' + selectedStatus + '"');
     return rowData;
   });
   
   if (filteredRows.length === 0) {
-    throw new Error('No data found for selected date');
+    throw new Error('No data found for selected date and pay type');
   }
   
   let csvContent = headers.map(header => '"' + header + '"').join(',') + '\n';
@@ -204,7 +255,6 @@ function generateCSV(sheetName, selectedDate, selectedStatus) {
   
   return csvContent;
 }
-
 
 function getColumnLetter(column) {
   let temp, letter = '';
